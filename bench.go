@@ -7,11 +7,14 @@ import (
 	"sync"
 	"time"
 
+	"fmt"
+
 	"github.com/codahale/hdrhistogram"
 )
 
 const (
-	maxRecordableLatencyNS = 300000000000
+	minRecordableLatencyNS = 1000000
+	maxRecordableLatencyNS = 100000000000
 	sigFigs                = 5
 )
 
@@ -59,7 +62,7 @@ func NewBenchmark(factory RequesterFactory, requestRate, connections uint64,
 	benchmarks := make([]*connectionBenchmark, connections)
 	for i := uint64(0); i < connections; i++ {
 		benchmarks[i] = newConnectionBenchmark(
-			i, factory.GetRequester(i), float64(requestRate)/float64(connections), duration)
+			i, connections, factory.GetRequester(i), float64(requestRate)/float64(connections), duration)
 	}
 
 	return &Benchmark{connections: connections, benchmarks: benchmarks}
@@ -86,6 +89,9 @@ func (b *Benchmark) Run() (*Summary, error) {
 			wg.Done()
 		}(benchmark)
 	}
+
+	// let go routines to start running
+	time.Sleep(20 * time.Millisecond)
 
 	// Start benchmark
 	close(start)
@@ -128,6 +134,7 @@ type result struct {
 // specified rate and capturing the latency distribution.
 type connectionBenchmark struct {
 	clientNum                   uint64
+	totalClients                uint64
 	requester                   Requester
 	requestRate                 float64
 	duration                    time.Duration
@@ -145,7 +152,7 @@ type connectionBenchmark struct {
 // benchmark using the given Requester. The requestRate argument specifies the
 // number of requests per second to issue. A zero value disables rate limiting
 // entirely. The duration argument specifies how long to run the benchmark.
-func newConnectionBenchmark(clientNum uint64, requester Requester, requestRate float64, duration time.Duration) *connectionBenchmark {
+func newConnectionBenchmark(clientNum, totalClients uint64, requester Requester, requestRate float64, duration time.Duration) *connectionBenchmark {
 	var interval time.Duration
 	if requestRate > 0 {
 		interval = time.Duration(1000000000 / requestRate)
@@ -153,14 +160,15 @@ func newConnectionBenchmark(clientNum uint64, requester Requester, requestRate f
 
 	return &connectionBenchmark{
 		clientNum:                   clientNum,
+		totalClients:                totalClients,
 		requester:                   requester,
 		requestRate:                 requestRate,
 		duration:                    duration,
 		expectedInterval:            interval,
-		successHistogram:            hdrhistogram.New(1, maxRecordableLatencyNS, sigFigs),
-		uncorrectedSuccessHistogram: hdrhistogram.New(1, maxRecordableLatencyNS, sigFigs),
-		errorHistogram:              hdrhistogram.New(1, maxRecordableLatencyNS, sigFigs),
-		uncorrectedErrorHistogram:   hdrhistogram.New(1, maxRecordableLatencyNS, sigFigs),
+		successHistogram:            hdrhistogram.New(minRecordableLatencyNS, maxRecordableLatencyNS, sigFigs),
+		uncorrectedSuccessHistogram: hdrhistogram.New(minRecordableLatencyNS, maxRecordableLatencyNS, sigFigs),
+		errorHistogram:              hdrhistogram.New(minRecordableLatencyNS, maxRecordableLatencyNS, sigFigs),
+		uncorrectedErrorHistogram:   hdrhistogram.New(minRecordableLatencyNS, maxRecordableLatencyNS, sigFigs),
 	}
 }
 
@@ -200,6 +208,19 @@ func (c *connectionBenchmark) runRateLimited() (time.Duration, error) {
 		stop     = time.After(c.duration)
 		start    = time.Now()
 	)
+
+	// Initial sleep to offset this client from others
+	initialTimeOffset := time.Duration(interval / int64(c.totalClients) * int64(c.clientNum))
+
+	// if too many clients are created then some of them will never have to send requests
+	if initialTimeOffset >= c.duration {
+		fmt.Printf("Client %d never has to run, returning\n", c.clientNum)
+		return c.duration, nil
+	}
+
+	// fmt.Printf("Client %d is doing initial sleep for %d\n", c.clientNum, initialTimeOffset)
+	time.Sleep(initialTimeOffset)
+
 	for {
 		select {
 		case <-stop:
@@ -229,7 +250,13 @@ func (c *connectionBenchmark) runRateLimited() (time.Duration, error) {
 		}
 
 		//*
-		time.Sleep(before.Add(c.expectedInterval).Sub(time.Now()))
+		// time.Sleep(before.Add(c.expectedInterval).Sub(time.Now()))
+
+		select {
+		case <-stop:
+			return time.Since(start), nil
+		case <-time.After(before.Add(c.expectedInterval).Sub(time.Now())):
+		}
 
 		/*/
 		for c.expectedInterval > (time.Now().Sub(before)) {
