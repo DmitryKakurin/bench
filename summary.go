@@ -11,7 +11,7 @@ import (
 // Summary contains the results of a Benchmark run.
 type Summary struct {
 	Connections                 uint64
-	RequestRate                 uint64
+	RequestRate                 float64
 	SuccessTotal                uint64
 	ErrorTotal                  uint64
 	TimeElapsed                 time.Duration
@@ -25,7 +25,7 @@ type Summary struct {
 // String returns a stringified version of the Summary.
 func (s *Summary) String() string {
 	return fmt.Sprintf(
-		"\n{Connections: %d, RequestRate: %d, RequestTotal: %d, SuccessTotal: %d, ErrorTotal: %d, TimeElapsed: %s, Throughput: %.2f/s}",
+		"\n{Connections: %d, RequestRate: %.0f, RequestTotal: %d, SuccessTotal: %d, ErrorTotal: %d, TimeElapsed: %s, Throughput: %.2f/s}",
 		s.Connections, s.RequestRate, (s.SuccessTotal + s.ErrorTotal), s.SuccessTotal, s.ErrorTotal, s.TimeElapsed, s.Throughput)
 }
 
@@ -53,7 +53,7 @@ func (s *Summary) GenerateErrorLatencyDistribution(percentiles Percentiles, file
 	return generateLatencyDistribution(s.ErrorHistogram, s.UncorrectedErrorHistogram, s.RequestRate, percentiles, file)
 }
 
-func generateLatencyDistribution(histogram, unHistogram *hdrhistogram.Histogram, requestRate uint64, percentiles Percentiles, file string) error {
+func generateLatencyDistribution(histogram, unHistogram *hdrhistogram.Histogram, requestRate float64, percentiles Percentiles, file string) error {
 	if percentiles == nil {
 		percentiles = Logarithmic
 	}

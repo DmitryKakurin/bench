@@ -59,7 +59,7 @@ func NewBenchmark(factory RequesterFactory, requestRate, connections uint64,
 	benchmarks := make([]*connectionBenchmark, connections)
 	for i := uint64(0); i < connections; i++ {
 		benchmarks[i] = newConnectionBenchmark(
-			factory.GetRequester(i), requestRate/connections, duration)
+			i, factory.GetRequester(i), float64(requestRate)/float64(connections), duration)
 	}
 
 	return &Benchmark{connections: connections, benchmarks: benchmarks}
@@ -127,8 +127,9 @@ type result struct {
 // connectionBenchmark performs a system benchmark by issuing requests at a
 // specified rate and capturing the latency distribution.
 type connectionBenchmark struct {
+	clientNum                   uint64
 	requester                   Requester
-	requestRate                 uint64
+	requestRate                 float64
 	duration                    time.Duration
 	expectedInterval            time.Duration
 	successHistogram            *hdrhistogram.Histogram
@@ -144,13 +145,14 @@ type connectionBenchmark struct {
 // benchmark using the given Requester. The requestRate argument specifies the
 // number of requests per second to issue. A zero value disables rate limiting
 // entirely. The duration argument specifies how long to run the benchmark.
-func newConnectionBenchmark(requester Requester, requestRate uint64, duration time.Duration) *connectionBenchmark {
+func newConnectionBenchmark(clientNum uint64, requester Requester, requestRate float64, duration time.Duration) *connectionBenchmark {
 	var interval time.Duration
 	if requestRate > 0 {
 		interval = time.Duration(1000000000 / requestRate)
 	}
 
 	return &connectionBenchmark{
+		clientNum:                   clientNum,
 		requester:                   requester,
 		requestRate:                 requestRate,
 		duration:                    duration,
