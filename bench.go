@@ -226,9 +226,14 @@ func (c *connectionBenchmark) runRateLimited() (time.Duration, error) {
 			c.successTotal++
 		}
 
+		//*
+		time.Sleep(before.Add(c.expectedInterval).Sub(time.Now()))
+
+		/*/
 		for c.expectedInterval > (time.Now().Sub(before)) {
 			// Busy spin
 		}
+		//*/
 	}
 }
 

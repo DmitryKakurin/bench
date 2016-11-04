@@ -75,7 +75,7 @@ func generateLatencyDistribution(histogram, unHistogram *hdrhistogram.Histogram,
 
 	// Generate uncorrected distribution.
 	if requestRate > 0 {
-		f, err := os.Create("uncorrected_" + file)
+		f, err := os.Create(file + ".uncorrected")
 		if err != nil {
 			return err
 		}
