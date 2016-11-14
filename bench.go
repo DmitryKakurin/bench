@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"fmt"
-
 	"github.com/codahale/hdrhistogram"
 )
 
@@ -214,7 +212,7 @@ func (c *connectionBenchmark) runRateLimited() (time.Duration, error) {
 
 	// if too many clients are created then some of them will never have to send requests
 	if initialTimeOffset >= c.duration {
-		fmt.Printf("Client %d never has to run, returning\n", c.clientNum)
+		// fmt.Printf("Client %d never has to run, returning\n", c.clientNum)
 		return c.duration, nil
 	}
 
